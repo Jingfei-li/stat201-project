@@ -1,0 +1,199 @@
+### Run this cell before continuing. 
+library(cowplot)
+library(datateachr)
+library(infer)
+library(repr)
+library(taxyvr)
+library(tidyverse)
+library(dplyr)
+library(magrittr)
+library(broom)
+library(digest)
+library(gridExtra)
+## set a seed for reproducibility
+set.seed(1111)
+
+## Downloading data from the internet and then reading it as a table
+mydata <- read.csv("students-mat.csv")
+
+
+#mutate school, sex, address, famsize, Pstatus, schoolsup, famsup, paid, activities, nursery, higher, internet, romantic cols to binary because they are binary values in nature
+cols <- c("school", "sex", "address", "famsize", "Pstatus", "schoolsup", "famsup", "paid", "activities", "nursery", "higher", "internet", "romantic")
+data %<>% mutate_at(cols, factor)
+head(mydata, 5)
+print("table2")
+
+#find the potential factors that can affect response varibale using a mutiple regression analysis
+#G3 is the grade for last term
+model <- lm(G3 ~ .)
+summary(model)
+
+#Code to count the number of male and female students in the two different school
+
+graph_count <- data %>% group_by(school) %>%  group_by(sex) %>% ggplot(aes(x = sex, 
+                                                                           fill = school)) + 
+  geom_bar(position = "stack") + ggtitle("Figure 1: Count of Male & Female In Both Schools") + 
+  theme(text = element_text(size=15)) +
+  scale_x_discrete(labels=c('Female Students', 'Male Students')) +
+  labs(x = "Sex", y = "Population", fill = "School Name")
+
+graph_count
+
+
+## Code to generate boxplot between males and females
+
+boxplots <- data %>%  
+  ggplot(aes(x = sex, y = G3)) + 
+  geom_boxplot() + 
+  ylab("Final Grade (/20)") +
+  xlab(" ")+
+  scale_x_discrete(labels=c('Female Grades', 'Male Grades')) +
+  ggtitle("Figure 2: Final Grades Comparison Between Genders") +
+  theme(text = element_text(size=15)) 
+boxplots
+
+
+## Code to generate Grade density between males and females
+
+p1 <- ggplot(data=data, aes(x=G3, color=sex)) +
+  geom_density(adjust=4) +
+  ggtitle("Figure 3: Final Grade Density Distribution Between Genders") +
+  labs(x = "Grades Distribution", color = "Sex") +
+  scale_color_discrete(labels=c('Female', 'Male')) +
+  theme(text = element_text(size=13))
+p1
+
+
+# setting hypothesis to check weather sex can affect students'grade
+summary <- data %>% 
+  group_by(sex) %>% 
+  summarise(n = n(),
+            x_bar = mean(G3),
+            sd = sd(G3),
+            `.groups` = "drop") %>% 
+  pivot_wider(names_from = sex, values_from = c(n, x_bar, sd)) %>%
+  mutate(mean_diff = x_bar_F - x_bar_M)
+summary
+print("table5")
+
+
+test <- tidy(
+  t.test(x = data %>% filter(sex == "M" ) %>% select(G3)%>% pull(),
+         y = data %>% filter(sex == "F" ) %>% select(G3) %>% pull(),
+         alternative = "greater" , mu = 0, conf.level = .95)) 
+
+pvalue <- test[5]
+test
+print("table6")
+pvalue
+print("table7")
+
+
+sample_mean <- data %>% 
+  specify(formula = G3 ~ sex ) %>% 
+  generate(reps = 1000 , type = "bootstrap") %>% 
+  group_by(replicate, sex) 
+
+plot <- sample_mean %>% 
+  summarize(mean = mean(G3)) %>%
+  ggplot(aes(x = mean , color = sex)) + 
+  geom_histogram(binwidth = 1/30) +
+  labs(color = "Mean Grades of") +
+  ggtitle("Figure 4: Bootstrap Sampling Distribution") +
+  scale_color_discrete(labels=c('Female', 'Male'))
+
+plot
+
+
+null_distribution <- data %>%
+  specify(formula = G3 ~ sex) %>%
+  generate(reps = 1000, type = "bootstrap") %>%
+  calculate(stat = "t", order = c("F", "M"))
+head(null_distribution)
+print("table8")
+
+
+diff_in_mean_ci <- null_distribution %>%
+  summarise(lower_ci = quantile(stat, 0.025), upper_ci = quantile(stat, 0.975))
+
+diff_in_mean_ci
+print("table9")
+
+
+
+diff_in_mean_plot <- null_distribution %>%
+  visualize() +
+  shade_confidence_interval(endpoints = diff_in_mean_ci) +
+  xlab("Difference in means") + 
+  ggtitle("Figure 5: Bootstrap Distribution of Mean Difference")
+diff_in_mean_plot
+
+# setting hypothesis to check weather study time, address,school support can affect students'grade
+summary <- data %>% 
+  group_by(study_time) %>% 
+  summarise(n = n(),
+            x_bar = mean(G3),
+            sd = sd(G3),
+            `.groups` = "drop") %>% 
+  pivot_wider(names_from = study_time, values_from = c(n, x_bar, sd)) %>%
+  mutate(mean_diff = x_bar_L - x_bar_S)
+summary
+
+
+test <- tidy(
+  t.test(x = data %>% filter(study_time == "Long" ) %>% select(G3)%>% pull(),
+         y = data %>% filter(study_time== "short" ) %>% select(G3) %>% pull(),
+         alternative = "greater" , mu = 0, conf.level = .95)) 
+
+pvalue <- test[5]
+test
+pvalue
+
+summary <- data %>% 
+  group_by(study_time) %>% 
+  summarise(n = n(),
+            x_bar = mean(G3),
+            sd = sd(G3),
+            `.groups` = "drop") %>% 
+  pivot_wider(names_from = address, values_from = c(n, x_bar, sd)) %>%
+  mutate(mean_diff = x_bar_U - x_bar_)R
+summary
+
+
+test <- tidy(
+  t.test(x = data %>% filter(study_time == "U" ) %>% select(G3)%>% pull(),
+         y = data %>% filter(study_time== "R" ) %>% select(G3) %>% pull(),
+         alternative = "greater" , mu = 0, conf.level = .95)) 
+
+pvalue <- test[5]
+test
+pvalue
+
+summary <- data %>% 
+  group_by(study_time) %>% 
+  summarise(n = n(),
+            x_bar = mean(G3),
+            sd = sd(G3),
+            `.groups` = "drop") %>% 
+  pivot_wider(names_from = study_time, values_from = c(n, x_bar, sd)) %>%
+  mutate(mean_diff = x_bar_Y - x_bar_N)
+summary
+
+
+test <- tidy(
+  t.test(x = data %>% filter(study_time ==  "Yes" ) %>% select(G3)%>% pull(),
+         y = data %>% filter(study_time== "No" ) %>% select(G3) %>% pull(),
+         alternative = "greater" , mu = 0, conf.level = .95)) 
+
+pvalue <- test[5]
+test
+pvalue
+
+# fit the multiple regression model
+model2 <- lm(G3 ~ sex + address + age + study_time + schoolsup, data = mydata)
+
+# calculate the variable importance scores
+importance_scores <- importance(model2)
+
+# display the variable importance scores
+importance_scores
